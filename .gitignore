@@ -1,0 +1,28 @@
+# .env
+.env
+
+# Node.js
+node_modules/
+
+# MongoDB
+# mongo.db
+
+# Build
+# build
+
+# Logs
+*.logs
+
+# Temporary files
+# tmp
+
+# IDE
+.idea
+.vscode
+
+# Other
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
