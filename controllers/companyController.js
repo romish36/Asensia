@@ -99,9 +99,6 @@ const createCompany = async (req, res) => {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
                 companyData[key] = `uploads/companies/${companyFolderName}/${file.filename}`;
-                console.log("Uploaded file info:", req.file);
-                console.log("Uploaded file path:", req.file.path);
-                console.log("Absolute uploads path:", require("path").resolve("uploads"));
             });
         }
 
@@ -248,9 +245,6 @@ const updateCompany = async (req, res) => {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
                 updateData[key] = `uploads/companies/${companyFolderName}/${file.filename}`;
-                console.log("Uploaded file info:", req.file);
-                console.log("Uploaded file path:", req.file.path);
-                console.log("Absolute uploads path:", require("path").resolve("uploads"));
             });
         }
 
