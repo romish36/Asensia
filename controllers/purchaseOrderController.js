@@ -317,7 +317,8 @@ const updatePurchaseOrder = async (req, res) => {
         if (!purchaseOrder) return res.status(404).json({ message: "Purchase invoice not found" });
 
         // Permission Check
-        if (req.user.role !== 'SUPER_ADMIN' && purchaseOrder.companyId.toString() !== req.user.companyId.toString()) {
+        const poCompanyId = purchaseOrder.companyId._id ? purchaseOrder.companyId._id.toString() : purchaseOrder.companyId.toString();
+        if (req.user.role !== 'SUPER_ADMIN' && poCompanyId !== req.user.companyId.toString()) {
             return res.status(403).json({ message: "Access denied" });
         }
 
@@ -350,7 +351,8 @@ const deletePurchaseOrder = async (req, res) => {
         if (!purchaseOrder) return res.status(404).json({ message: "Purchase invoice not found" });
 
         // Permission Check
-        if (req.user.role !== 'SUPER_ADMIN' && purchaseOrder.companyId.toString() !== req.user.companyId.toString()) {
+        const poCompanyId = purchaseOrder.companyId._id ? purchaseOrder.companyId._id.toString() : purchaseOrder.companyId.toString();
+        if (req.user.role !== 'SUPER_ADMIN' && poCompanyId !== req.user.companyId.toString()) {
             return res.status(403).json({ message: "Access denied" });
         }
 

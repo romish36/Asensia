@@ -23,6 +23,16 @@ const getNextInvoiceMetaId = async () => {
     return lastDoc && lastDoc.invoiceMetaId ? lastDoc.invoiceMetaId + 1 : 1;
 };
 
+const getNextCategoryId = async () => {
+    const lastDoc = await Category.findOne().sort({ categoryId: -1 });
+    return lastDoc && lastDoc.categoryId ? lastDoc.categoryId + 1 : 1;
+};
+
+const getNextProductId = async () => {
+    const lastDoc = await Product.findOne().sort({ productId: -1 });
+    return lastDoc && lastDoc.productId ? lastDoc.productId + 1 : 1;
+};
+
 const BundleItem = require("../models/bundleItemModel");
 
 // Helper for reverting stock when Invoice is edited or deleted
@@ -90,12 +100,24 @@ const applyStockEffect = async (invoice, reqUser) => {
         for (let i = 0; i < invoice.items.length; i++) {
             const item = invoice.items[i];
 
-            // 1. Find or establish IDs for Meta
-            const categoryDocForProd = await Category.findOne({
+            // 1. Find or create Category
+            let categoryDocForProd = await Category.findOne({
                 categoryName: item.category,
                 companyId: invoice.companyId
             });
 
+            if (!categoryDocForProd && item.category) {
+                const nextCatId = await getNextCategoryId();
+                categoryDocForProd = new Category({
+                    categoryId: nextCatId,
+                    categoryName: item.category,
+                    companyId: invoice.companyId,
+                    createdBy: reqUser._id
+                });
+                await categoryDocForProd.save();
+            }
+
+            // 2. Find or create Product
             const prodQueryForApply = {
                 productName: item.product,
                 companyId: invoice.companyId
@@ -104,7 +126,28 @@ const applyStockEffect = async (invoice, reqUser) => {
                 prodQueryForApply.categoryId = categoryDocForProd._id;
             }
 
-            const productDoc = await Product.findOne(prodQueryForApply);
+            let productDoc = await Product.findOne(prodQueryForApply);
+
+            if (!productDoc && item.product) {
+                const nextProdId = await getNextProductId();
+                productDoc = new Product({
+                    productId: nextProdId,
+                    categoryId: categoryDocForProd._id,
+                    productName: item.product,
+                    productHsnCode: item.hsnCode,
+                    productModelNumber: item.modelNumber,
+                    productGrade: item.grade,
+                    sizeId: item.sizeId || 0,
+                    sizeName: item.sizeName || '-',
+                    productSalePrice: String(item.rate || 0),
+                    productStock: 0, // Start with 0, will go negative below
+                    companyId: invoice.companyId,
+                    createdBy: reqUser._id,
+                    date: new Date().toLocaleDateString(),
+                    time: new Date().toLocaleTimeString()
+                });
+                await productDoc.save();
+            }
 
             const colorDoc = await Color.findOne({
                 colorName: item.color,
@@ -116,7 +159,7 @@ const applyStockEffect = async (invoice, reqUser) => {
                 companyId: invoice.companyId
             });
 
-            // 2. Create InvoiceMeta record (Always created for the line item on invoice)
+            // 3. Create InvoiceMeta record
             const metaEntry = new InvoiceMeta({
                 invoiceMetaId: currentMetaId++,
                 invoiceId: invoice.invoiceId,
@@ -146,33 +189,27 @@ const applyStockEffect = async (invoice, reqUser) => {
                 const quantityToDeduct = Number(item.quantity) || 0;
 
                 // Check if Bundle
-                if (Number(productDoc.productType) === 1) { // 1 = Bundle
-                    // Handle Bundle Logic
+                if (Number(productDoc.productType) === 1) {
                     const bundleItems = await BundleItem.find({ productBundleId: productDoc.productId });
 
                     for (const bundleItem of bundleItems) {
                         const childProd = await Product.findOne({ productId: bundleItem.productId });
 
                         if (childProd) {
-                            // Deduct Stock from Child Product
                             childProd.productStock = (childProd.productStock || 0) - quantityToDeduct;
                             await childProd.save();
 
-                            // Create OutStock Entry for CHILD Product
-                            // The user wants to see the individual items in OutStock
                             const outStockEntry = new OutStock({
                                 outStockId: currentOutStockId++,
                                 invoiceId: invoice.invoiceId,
-                                invoiceMetaId: metaEntry.invoiceMetaId, // Link to the parent invoice line meta
+                                invoiceMetaId: metaEntry.invoiceMetaId,
                                 invoiceNo: invoice.invoiceNo,
                                 outQuantityDate: invoice.invoiceDate,
-                                productId: childProd.productId,       // Child ID
-                                productName: childProd.productName,   // Child Name
-                                outQuantity: String(quantityToDeduct), // Deducted amount (Bundle Qty * 1)
-                                outPrice: String(childProd.productSalePrice || 0), // Use child price or pro-rated? Usually child price or 0 if part of bundle. 
-                                // User didn't specify price logic for out stock, but OutStock usually tracks quantity. 
-                                // Let's use 0 or keep it simple.
-                                totalAmount: "0", // Bundle carries the amount, child is just stock deduction
+                                productId: childProd.productId,
+                                productName: childProd.productName,
+                                outQuantity: String(quantityToDeduct),
+                                outPrice: "0",
+                                totalAmount: "0",
                                 date: new Date().toLocaleDateString(),
                                 time: new Date().toLocaleTimeString(),
                                 companyId: invoice.companyId,
@@ -184,12 +221,9 @@ const applyStockEffect = async (invoice, reqUser) => {
 
                 } else {
                     // Normal Product Logic
-
-                    // 3. Update Product Stock (SUBTRACT)
                     productDoc.productStock = (productDoc.productStock || 0) - quantityToDeduct;
                     await productDoc.save();
 
-                    // 4. Create OutStock record
                     const outStockEntry = new OutStock({
                         outStockId: currentOutStockId++,
                         invoiceId: invoice.invoiceId,
@@ -209,8 +243,6 @@ const applyStockEffect = async (invoice, reqUser) => {
                     await outStockEntry.save();
                 }
 
-            } else {
-                console.warn(`Product ${item.product} not found for stock deduction.`);
             }
         }
     }
@@ -392,7 +424,8 @@ const updateSalesInvoice = async (req, res) => {
         if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
         // Permission Check
-        if (req.user.role !== 'SUPER_ADMIN' && invoice.companyId.toString() !== req.user.companyId.toString()) {
+        const invoiceCompanyId = invoice.companyId._id ? invoice.companyId._id.toString() : invoice.companyId.toString();
+        if (req.user.role !== 'SUPER_ADMIN' && invoiceCompanyId !== req.user.companyId.toString()) {
             return res.status(403).json({ message: "Access denied" });
         }
 
@@ -425,7 +458,8 @@ const deleteSalesInvoice = async (req, res) => {
         if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
         // Permission Check
-        if (req.user.role !== 'SUPER_ADMIN' && invoice.companyId.toString() !== req.user.companyId.toString()) {
+        const invoiceCompanyId = invoice.companyId._id ? invoice.companyId._id.toString() : invoice.companyId.toString();
+        if (req.user.role !== 'SUPER_ADMIN' && invoiceCompanyId !== req.user.companyId.toString()) {
             return res.status(403).json({ message: "Access denied" });
         }
 

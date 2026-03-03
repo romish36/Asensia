@@ -27,9 +27,12 @@ const checkPermission = (moduleName, action) => {
             }
 
             // Fetch permissions from DB
-            // We try both formats if numeric userId is used
-            const query = typeof userId === 'number' ? { userId } : { mongoUserId: userId };
-            let userPerms = await UserPermissions.findOne({ userId: Number(userId) });
+            const numericUserId = Number(req.user.userId);
+            let userPerms = null;
+
+            if (!isNaN(numericUserId)) {
+                userPerms = await UserPermissions.findOne({ userId: numericUserId });
+            }
 
             if (!userPerms) {
                 console.warn(`[Permission] DENIED: No permissions document found for user: ${userId} (${req.user.userEmail})`);

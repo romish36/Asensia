@@ -106,7 +106,7 @@ const getPermissionMetadata = async (req, res) => {
         "Seller", "Customer", "Transporter", "Product",
         "Category", "Expense", "User", "Grade",
         "CustomerType", "InvoiceName", "PaymentMode",
-        "SaleType", "Color", "ExpensePurpose"
+        "SaleType", "Color", "ExpensePurpose", "Plan", "Coupon"
     ];
 
     const actions = [

@@ -10,6 +10,9 @@ const Category = require("../models/categoryModel");
 const InStock = require("../models/inStockModel");
 const OutStock = require("../models/outStockModel");
 const Company = require("../models/companyModel");
+const User = require("../models/userModel");
+const Plan = require("../models/planModel");
+const Coupon = require("../models/couponModel");
 const mongoose = require("mongoose");
 
 const getDashboardStats = async (req, res) => {
@@ -30,7 +33,10 @@ const getDashboardStats = async (req, res) => {
             transporterCount,
             productCount,
             categoryCount,
-            companyCount
+            companyCount,
+            userCount,
+            planCount,
+            couponCount
         ] = await Promise.all([
             PurchaseOrder.countDocuments({ ...query, active: true }),
             SalesInvoice.countDocuments({ ...query, active: true }),
@@ -39,7 +45,10 @@ const getDashboardStats = async (req, res) => {
             Transporter.countDocuments(query),
             Product.countDocuments(query),
             Category.countDocuments(query),
-            Company.countDocuments({})
+            Company.countDocuments({}),
+            User.countDocuments({ role: { $ne: 'SUPER_ADMIN' }, isActive: true }),
+            Plan.countDocuments({ isActive: true }),
+            Coupon.countDocuments({ isActive: true })
         ]);
 
         // Purchase Total (Include 18% GST)
@@ -176,6 +185,9 @@ const getDashboardStats = async (req, res) => {
                 products: productCount,
                 categories: categoryCount,
                 companies: companyCount,
+                users: userCount,
+                plans: planCount,
+                coupons: couponCount,
                 totalInStock: totalIn,
                 totalOutStock: totalOut,
                 totalPurchaseAmount: counts_totalPurchaseAmount,
