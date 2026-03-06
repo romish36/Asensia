@@ -28,8 +28,24 @@ const chatSchema = new mongoose.Schema(
         },
         message: {
             type: String,
-            required: true,
             trim: true
+        },
+        fileUrl: {
+            type: String,
+            default: null
+        },
+        fileType: {
+            type: String,
+            enum: ['text', 'image', 'video', 'document', 'other'],
+            default: 'text'
+        },
+        fileName: {
+            type: String,
+            default: null
+        },
+        fileSize: {
+            type: Number,
+            default: null
         },
         roomId: {
             type: String,
@@ -39,9 +55,27 @@ const chatSchema = new mongoose.Schema(
         isRead: {
             type: Boolean,
             default: false
+        },
+        isDelivered: {
+            type: Boolean,
+            default: false
+        },
+        deletedBy: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        }],
+        isDeletedForEveryone: {
+            type: Boolean,
+            default: false
+        },
+        isEdited: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }
 );
 
+
 module.exports = mongoose.model('Chat', chatSchema);
+

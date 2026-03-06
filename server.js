@@ -85,7 +85,18 @@ app.use("/api/plan", require("./routes/planRoutes"));
 app.use("/api/coupon", require("./routes/couponRoutes"));
 app.use("/api/chat", require("./routes/chatRoutes"));
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('SERVER ERROR:', err.stack || err);
+    res.status(err.status || 500).json({
+        message: err.message || 'Internal Server Error',
+        error: process.env.NODE_ENV === 'production' ? {} : err
+    });
 });
+
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+    console.log(`Server RESTARTED on port ${PORT} - Memory Limit: 50MB`);
+});
+
+

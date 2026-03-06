@@ -45,6 +45,8 @@ const revertStockEffect = async (purchaseOrder) => {
                 if (prod) {
                     if (prod.stockType !== 2) {
                         prod.productStock = (prod.productStock || 0) - (Number(item.quantity) || 0);
+                        // Auto-update stockType based on remaining stock
+                        prod.stockType = prod.productStock > 0 ? 1 : 0;
                         await prod.save();
                     }
                 }
@@ -125,6 +127,8 @@ const applyStockEffect = async (purchaseOrder, reqUser) => {
             const quantityToAdd = Number(item.quantity) || 0;
             if (productDoc.stockType !== 2) {
                 productDoc.productStock = (productDoc.productStock || 0) + quantityToAdd;
+                // Auto-update stockType based on new stock level
+                productDoc.stockType = productDoc.productStock > 0 ? 1 : 0;
                 await productDoc.save();
             }
 
