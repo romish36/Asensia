@@ -87,18 +87,16 @@ app.use("/api/chat", require("./routes/chatRoutes"));
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-    // Log the full error to the console
-    console.error('--- SERVER ERROR DETECTED ---');
-    console.error('Name:', err.name);
+    // Keep detailed logs on the server for the developer
+    console.error('--- SERVER ERROR ---');
     console.error('Message:', err.message);
-    if (err.stack) console.error('Stack:', err.stack);
-    console.error('-----------------------------');
+    if (err.stack) console.error('Stack Trace:', err.stack);
 
     res.status(err.status || 500).json({
         message: err.message || 'Internal Server Error',
-        // Temporarily exposing error details even in production to help the user debug
-        error: err,
-        errorName: err.name
+        // Hide raw error object in production for security, but show error name
+        errorName: err.name,
+        error: process.env.NODE_ENV === 'production' ? {} : err
     });
 });
 

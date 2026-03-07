@@ -65,18 +65,41 @@ const getChatPartners = async (req, res) => {
             ];
         }
 
-        // Fetch unread counts for each partner
-        const partnersWithUnread = await Promise.all(partners.map(async (p) => {
+        // Fetch unread counts and latest message for each partner
+        const partnersWithExtras = await Promise.all(partners.map(async (p) => {
             const partnerId = p._id || p.id;
+
+            // Unread count
             const unreadCount = await Chat.countDocuments({
                 senderId: partnerId,
                 receiverId: _id,
                 isRead: false
             });
-            return { ...(p._doc || p), unreadCount };
+
+            // Find latest message for sorting
+            const latestMessage = await Chat.findOne({
+                $or: [
+                    { senderId: partnerId, receiverId: _id },
+                    { senderId: _id, receiverId: partnerId }
+                ],
+                deletedBy: { $ne: _id },
+                isDeletedForEveryone: { $ne: true }
+            }).sort({ createdAt: -1 });
+
+            // Using epoch 0 if no message history exists
+            const lastMessageTime = latestMessage ? new Date(latestMessage.createdAt).getTime() : 0;
+
+            return {
+                ...(p._doc || p),
+                unreadCount,
+                lastMessageTime
+            };
         }));
 
-        res.status(200).json(partnersWithUnread);
+        // Sort partners by the latest message time, descending (newest first)
+        partnersWithExtras.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+        res.status(200).json(partnersWithExtras);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
