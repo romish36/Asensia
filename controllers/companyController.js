@@ -93,12 +93,11 @@ const createCompany = async (req, res) => {
 
         const companyData = { ...req.body };
 
-        // Handle File Uploads (Cloudinary: req.file.path is the full CDN URL)
+        // Handle File Uploads
         if (req.files) {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                // Cloudinary storage sets file.path to the full https:// URL
-                companyData[key] = file.path || file.secure_url || file.url;
+                companyData[key] = `uploads/companies/${file.filename}`;
             });
         }
 
@@ -238,12 +237,18 @@ const updateCompany = async (req, res) => {
 
         const updateData = { ...req.body };
 
-        // Handle File Uploads (Cloudinary: req.file.path is the full CDN URL)
+        // Sanitize numeric/ID fields to avoid CastError for empty strings or 'null' strings
+        if (updateData.planId === '' || updateData.planId === 'null' || updateData.planId === 'undefined') updateData.planId = null;
+        if (updateData.countryId === '' || updateData.countryId === 'null' || updateData.countryId === 'undefined') updateData.countryId = null;
+        if (updateData.stateId === '' || updateData.stateId === 'null' || updateData.stateId === 'undefined') updateData.stateId = null;
+        if (updateData.cityId === '' || updateData.cityId === 'null' || updateData.cityId === 'undefined') updateData.cityId = null;
+        if (updateData.companyBackground === '') updateData.companyBackground = 1;
+
+        // Handle File Uploads
         if (req.files) {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                // Cloudinary storage sets file.path to the full https:// URL
-                updateData[key] = file.path || file.secure_url || file.url;
+                updateData[key] = `uploads/companies/${file.filename}`;
             });
         }
 
