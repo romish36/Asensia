@@ -93,6 +93,22 @@ const createCompany = async (req, res) => {
 
         const companyData = { ...req.body };
 
+        // Helper to sanitize numeric/ID fields that might arrive as 'null', 'undefined', or empty strings from FormData
+        const sanitizeNumeric = (val, defaultVal = null) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return defaultVal;
+            const num = Number(val);
+            return isNaN(num) ? defaultVal : num;
+        };
+        const sanitizeObjectId = (val) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return null;
+            return val;
+        };
+        const sanitizeDate = (val) => {
+            if (!val || val === 'null' || val === 'undefined' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
         // Handle File Uploads (Cloudinary)
         if (req.files) {
             Object.keys(req.files).forEach(key => {
@@ -105,8 +121,19 @@ const createCompany = async (req, res) => {
             return res.status(400).json({ message: 'Company Name is required' });
         }
 
-        // Check if company email already exists (using new schema field)
-        // If companyEmail is provided
+        // Sanitize all numeric and ID fields
+        companyData.countryId = sanitizeNumeric(companyData.countryId);
+        companyData.stateId = sanitizeNumeric(companyData.stateId);
+        companyData.cityId = sanitizeNumeric(companyData.cityId);
+        companyData.insertId = sanitizeNumeric(companyData.insertId);
+        companyData.updateId = sanitizeNumeric(companyData.updateId);
+        companyData.deleteId = sanitizeNumeric(companyData.deleteId);
+        companyData.companyBackground = sanitizeNumeric(companyData.companyBackground, 1);
+        companyData.planId = sanitizeObjectId(companyData.planId);
+        companyData.planStartDate = sanitizeDate(companyData.planStartDate);
+        companyData.planExpiryDate = sanitizeDate(companyData.planExpiryDate);
+
+        // Check if company email already exists
         if (companyData.companyEmail) {
             const existingCompany = await Company.findOne({ companyEmail: companyData.companyEmail });
             if (existingCompany) {
@@ -117,12 +144,6 @@ const createCompany = async (req, res) => {
         // Generate next companyId
         const nextId = await getNextId();
         companyData.companyId = nextId;
-
-        // Sanitize numeric fields to avoid CastError for empty strings
-        if (!companyData.countryId) companyData.countryId = null;
-        if (!companyData.stateId) companyData.stateId = null;
-        if (!companyData.cityId) companyData.cityId = null;
-        if (companyData.companyBackground === '') companyData.companyBackground = 1;
 
         // Handle Plan: Priority to provided start date, else auto-calculate
         if (companyData.planId) {
@@ -237,12 +258,33 @@ const updateCompany = async (req, res) => {
 
         const updateData = { ...req.body };
 
-        // Sanitize numeric/ID fields to avoid CastError for empty strings or 'null' strings
-        if (updateData.planId === '' || updateData.planId === 'null' || updateData.planId === 'undefined') updateData.planId = null;
-        if (updateData.countryId === '' || updateData.countryId === 'null' || updateData.countryId === 'undefined') updateData.countryId = null;
-        if (updateData.stateId === '' || updateData.stateId === 'null' || updateData.stateId === 'undefined') updateData.stateId = null;
-        if (updateData.cityId === '' || updateData.cityId === 'null' || updateData.cityId === 'undefined') updateData.cityId = null;
-        if (updateData.companyBackground === '') updateData.companyBackground = 1;
+        // Helper to sanitize numeric/ID fields that might arrive as 'null', 'undefined', or empty strings from FormData
+        const sanitizeNumeric = (val, defaultVal = null) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return defaultVal;
+            const num = Number(val);
+            return isNaN(num) ? defaultVal : num;
+        };
+        const sanitizeObjectId = (val) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return null;
+            return val;
+        };
+        const sanitizeDate = (val) => {
+            if (!val || val === 'null' || val === 'undefined' || val === '') return null;
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        updateData.companyId = sanitizeNumeric(updateData.companyId);
+        updateData.countryId = sanitizeNumeric(updateData.countryId);
+        updateData.stateId = sanitizeNumeric(updateData.stateId);
+        updateData.cityId = sanitizeNumeric(updateData.cityId);
+        updateData.insertId = sanitizeNumeric(updateData.insertId);
+        updateData.updateId = sanitizeNumeric(updateData.updateId);
+        updateData.deleteId = sanitizeNumeric(updateData.deleteId);
+        updateData.companyBackground = sanitizeNumeric(updateData.companyBackground, 1);
+        updateData.planId = sanitizeObjectId(updateData.planId);
+        updateData.planStartDate = sanitizeDate(updateData.planStartDate);
+        updateData.planExpiryDate = sanitizeDate(updateData.planExpiryDate);
 
         // Handle File Uploads (Cloudinary)
         if (req.files) {
