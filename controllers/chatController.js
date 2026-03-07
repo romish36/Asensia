@@ -20,6 +20,24 @@ const getChatHistory = async (req, res) => {
     }
 };
 
+const getRoomId = (me, partner) => {
+    if (!me || !partner) return '';
+    const pId = partner._id || partner.id;
+    if (me.role === 'SUPER_ADMIN') {
+        return `superadmin_companyadmin_${pId}`;
+    }
+    if (partner.role === 'SUPER_ADMIN') {
+        return `superadmin_companyadmin_${me._id}`;
+    }
+    if (me.role === 'USER' && partner.role === 'USER') {
+        const ids = [me._id.toString(), pId.toString()].sort();
+        return `company_${me.companyId}_user_${ids[0]}_user_${ids[1]}`;
+    }
+    const userId = me.role === 'USER' ? me._id : pId;
+    const companyId = me.companyId || (partner.companyId?._id || partner.companyId);
+    return `company_${companyId}_admin_user_${userId}`;
+};
+
 // @desc    Get users/admins to chat with based on role
 // @route   GET /api/chat/partners
 const getChatPartners = async (req, res) => {
@@ -65,16 +83,25 @@ const getChatPartners = async (req, res) => {
             ];
         }
 
-        // Fetch unread counts for each partner
+        // Fetch unread counts AND last message date for each partner
         const partnersWithUnread = await Promise.all(partners.map(async (p) => {
             const partnerId = p._id || p.id;
+            const roomId = getRoomId(req.user, p);
+            const latestMessage = await Chat.findOne({ roomId }).sort({ createdAt: -1 }).select('createdAt');
             const unreadCount = await Chat.countDocuments({
                 senderId: partnerId,
                 receiverId: _id,
                 isRead: false
             });
-            return { ...(p._doc || p), unreadCount };
+            return {
+                ...(p._doc || p),
+                unreadCount,
+                lastMessageDate: latestMessage ? latestMessage.createdAt : new Date(0)
+            };
         }));
+
+        // Sort by last message date descending (most recent first)
+        partnersWithUnread.sort((a, b) => new Date(b.lastMessageDate) - new Date(a.lastMessageDate));
 
         res.status(200).json(partnersWithUnread);
     } catch (error) {
