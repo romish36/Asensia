@@ -93,11 +93,11 @@ const createCompany = async (req, res) => {
 
         const companyData = { ...req.body };
 
-        // Handle File Uploads
+        // Handle File Uploads (Cloudinary)
         if (req.files) {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                companyData[key] = `uploads/companies/${file.filename}`;
+                companyData[key] = file.path; // Cloudinary URL
             });
         }
 
@@ -244,11 +244,11 @@ const updateCompany = async (req, res) => {
         if (updateData.cityId === '' || updateData.cityId === 'null' || updateData.cityId === 'undefined') updateData.cityId = null;
         if (updateData.companyBackground === '') updateData.companyBackground = 1;
 
-        // Handle File Uploads
+        // Handle File Uploads (Cloudinary)
         if (req.files) {
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                updateData[key] = `uploads/companies/${file.filename}`;
+                updateData[key] = file.path; // Cloudinary URL
             });
         }
 

@@ -2,18 +2,14 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const dir = path.join(__dirname, '..', 'uploads', 'companies');
+const { cloudinary } = require('../utils/cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        cb(null, dir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname).toLowerCase());
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'asencia_companies',
+        resource_type: 'auto',
     }
 });
 
