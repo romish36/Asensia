@@ -93,11 +93,20 @@ const createCompany = async (req, res) => {
 
         const companyData = { ...req.body };
 
+        // Clean up data - FormData sends everything as strings
+        const sanitizeNumber = (val, defaultVal = 0) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return defaultVal;
+            const parsed = Number(val);
+            return isNaN(parsed) ? defaultVal : parsed;
+        };
+
         // Handle File Uploads (Cloudinary)
         if (req.files) {
             Object.keys(req.files).forEach(key => {
-                const file = req.files[key][0];
-                companyData[key] = file.path; // Cloudinary URL
+                if (req.files[key] && req.files[key][0]) {
+                    const file = req.files[key][0];
+                    companyData[key] = file.path; // Cloudinary URL
+                }
             });
         }
 
@@ -105,9 +114,8 @@ const createCompany = async (req, res) => {
             return res.status(400).json({ message: 'Company Name is required' });
         }
 
-        // Check if company email already exists (using new schema field)
-        // If companyEmail is provided
-        if (companyData.companyEmail) {
+        // Check if company email already exists
+        if (companyData.companyEmail && companyData.companyEmail !== 'null' && companyData.companyEmail !== '') {
             const existingCompany = await Company.findOne({ companyEmail: companyData.companyEmail });
             if (existingCompany) {
                 return res.status(400).json({ message: 'Company with this email already exists' });
@@ -118,71 +126,54 @@ const createCompany = async (req, res) => {
         const nextId = await getNextId();
         companyData.companyId = nextId;
 
-        // Sanitize numeric fields to avoid CastError for empty strings
-        if (!companyData.countryId) companyData.countryId = null;
-        if (!companyData.stateId) companyData.stateId = null;
-        if (!companyData.cityId) companyData.cityId = null;
-        if (companyData.companyBackground === '') companyData.companyBackground = 1;
+        // Sanitize numeric fields
+        companyData.countryId = sanitizeNumber(companyData.countryId, null);
+        companyData.stateId = sanitizeNumber(companyData.stateId, null);
+        companyData.cityId = sanitizeNumber(companyData.cityId, null);
+        companyData.companyBackground = sanitizeNumber(companyData.companyBackground, 1);
 
-        // Handle Plan: Priority to provided start date, else auto-calculate
-        if (companyData.planId) {
+        // Handle Plan
+        if (companyData.planId && companyData.planId !== 'null' && companyData.planId !== '') {
             const plan = await Plan.findById(companyData.planId);
             if (plan) {
-                const startDate = companyData.planStartDate ? new Date(companyData.planStartDate) : new Date();
+                const startDate = companyData.planStartDate && companyData.planStartDate !== 'null' ? new Date(companyData.planStartDate) : new Date();
 
-                // Use provided expiry date if valid, else calculate
                 let expiryDate;
-                if (companyData.planExpiryDate) {
+                if (companyData.planExpiryDate && companyData.planExpiryDate !== 'null') {
                     expiryDate = new Date(companyData.planExpiryDate);
                 } else {
                     expiryDate = new Date(startDate);
-                    expiryDate.setDate(expiryDate.getDate() + plan.planDurationDays);
+                    expiryDate.setDate(expiryDate.getDate() + (plan.planDurationDays || 0));
                 }
 
                 companyData.planName = plan.planName;
                 companyData.planDurationDays = plan.planDurationDays;
-                companyData.planPrice = plan.planPrice || 0;
-                companyData.planDiscount = plan.planDiscount || 0;
+                companyData.planPrice = sanitizeNumber(plan.planPrice, 0);
+                companyData.planDiscount = sanitizeNumber(plan.planDiscount, 0);
 
-                // Calculate base price after plan discount
-                let calculatedPrice = (plan.planPrice || 0) * (1 - (plan.planDiscount || 0) / 100);
+                let calculatedPrice = companyData.planPrice * (1 - (companyData.planDiscount / 100));
                 let couponDiscount = 0;
 
-                // Handle Coupon Application
-                if (companyData.couponCode) {
+                if (companyData.couponCode && companyData.couponCode !== 'null' && companyData.couponCode !== '') {
                     const now = new Date();
                     const coupon = await Coupon.findOne({ couponCode: companyData.couponCode.toUpperCase(), isActive: true });
 
-                    if (!coupon) {
-                        return res.status(400).json({ message: 'Invalid coupon code' });
+                    if (coupon && now >= new Date(coupon.validFrom) && now <= new Date(coupon.validTo)) {
+                        if (coupon.discountType === 'percentage') {
+                            couponDiscount = calculatedPrice * (coupon.discountValue / 100);
+                        } else {
+                            couponDiscount = coupon.discountValue;
+                        }
+                        companyData.couponDiscountAmount = couponDiscount;
+                        calculatedPrice -= couponDiscount;
                     }
-                    if (now < new Date(coupon.validFrom) || now > new Date(coupon.validTo)) {
-                        return res.status(400).json({ message: 'Coupon has expired' });
-                    }
-                    if (coupon.applicablePlans.length > 0 && !coupon.applicablePlans.some(p => p.toString() === plan._id.toString())) {
-                        return res.status(400).json({ message: 'Coupon not applicable to this plan' });
-                    }
-
-                    if (coupon.discountType === 'percentage') {
-                        couponDiscount = calculatedPrice * (coupon.discountValue / 100);
-                    } else {
-                        couponDiscount = coupon.discountValue;
-                    }
-
-                    companyData.couponDiscountAmount = couponDiscount;
-                    calculatedPrice -= couponDiscount;
-                } else {
-                    companyData.couponDiscountAmount = 0;
                 }
 
                 companyData.finalPrice = Math.max(0, calculatedPrice);
                 companyData.planStartDate = startDate;
                 companyData.planExpiryDate = expiryDate;
-
-                // We will create the CouponUsage record AFTER company creation to get company._id
             }
         } else {
-            // Clear plan fields if no plan selected
             companyData.planId = null;
             companyData.planName = '';
             companyData.planDurationDays = null;
@@ -193,29 +184,35 @@ const createCompany = async (req, res) => {
             companyData.planExpiryDate = null;
         }
 
-        // Set isActive default
         if (companyData.isActive === undefined) companyData.isActive = true;
 
         const company = await Company.create(companyData);
 
-        // If coupon was used, record it
-        if (companyData.couponCode) {
-            const coupon = await Coupon.findOne({ couponCode: companyData.couponCode.toUpperCase() });
-            if (coupon) {
-                await CouponUsage.create({
-                    couponId: coupon._id,
-                    companyId: company._id,
-                    planId: company.planId,
-                    discountAmount: companyData.couponDiscountAmount,
-                    finalPrice: company.finalPrice
-                });
+        // Record coupon usage
+        if (companyData.couponCode && companyData.couponCode !== 'null' && companyData.couponCode !== '') {
+            try {
+                const coupon = await Coupon.findOne({ couponCode: companyData.couponCode.toUpperCase() });
+                if (coupon) {
+                    await CouponUsage.create({
+                        couponId: coupon._id,
+                        companyId: company._id,
+                        planId: company.planId,
+                        discountAmount: companyData.couponDiscountAmount || 0,
+                        finalPrice: company.finalPrice || 0
+                    });
+                }
+            } catch (cError) {
+                console.error('Coupon usage record error:', cError);
             }
         }
 
         res.status(201).json(company);
     } catch (error) {
-        console.error('Create Company Error:', error);
-        res.status(500).json({ message: error.message });
+        console.error('Create Company Detailed Error:', error);
+        res.status(500).json({
+            message: 'Internal Server Error during company creation',
+            error: error.message
+        });
     }
 };
 
@@ -224,115 +221,100 @@ const createCompany = async (req, res) => {
 // @access  Private (SUPER_ADMIN or company ADMIN)
 const updateCompany = async (req, res) => {
     try {
-        const company = await Company.findById(req.params.id);
+        const id = req.params.id;
+        if (!id || id === 'undefined' || id === 'null') {
+            return res.status(400).json({ message: 'Valid Company ID is required' });
+        }
+
+        const company = await Company.findById(id);
 
         if (!company) {
             return res.status(404).json({ message: 'Company not found' });
         }
 
-        // Check permissions: SUPER_ADMIN can update any company, ADMIN can only update their own
-        if (req.user.role !== 'SUPER_ADMIN' && req.user.companyId?.toString() !== req.params.id) {
+        // Check permissions
+        if (req.user.role !== 'SUPER_ADMIN' && req.user.companyId?.toString() !== id) {
             return res.status(403).json({ message: 'Access denied' });
         }
 
         const updateData = { ...req.body };
 
-        // Sanitize numeric/ID fields to avoid CastError for empty strings or 'null' strings
-        if (updateData.planId === '' || updateData.planId === 'null' || updateData.planId === 'undefined') updateData.planId = null;
-        if (updateData.countryId === '' || updateData.countryId === 'null' || updateData.countryId === 'undefined') updateData.countryId = null;
-        if (updateData.stateId === '' || updateData.stateId === 'null' || updateData.stateId === 'undefined') updateData.stateId = null;
-        if (updateData.cityId === '' || updateData.cityId === 'null' || updateData.cityId === 'undefined') updateData.cityId = null;
-        if (updateData.companyBackground === '') updateData.companyBackground = 1;
+        // Clean up data - FormData sends everything as strings
+        const sanitizeNumber = (val, defaultVal = 0) => {
+            if (val === '' || val === 'null' || val === 'undefined' || val === null || val === undefined) return defaultVal;
+            const parsed = Number(val);
+            return isNaN(parsed) ? defaultVal : parsed;
+        };
+
+        const sanitizeString = (val) => {
+            if (val === 'null' || val === 'undefined' || val === '') return null;
+            return val;
+        };
+
+        // Numeric fields sanitization
+        updateData.companyBackground = sanitizeNumber(updateData.companyBackground, 1);
+        updateData.countryId = sanitizeNumber(updateData.countryId, null);
+        updateData.stateId = sanitizeNumber(updateData.stateId, null);
+        updateData.cityId = sanitizeNumber(updateData.cityId, null);
+
+        // Plan numeric fields
+        updateData.planPrice = sanitizeNumber(updateData.planPrice, 0);
+        updateData.planDiscount = sanitizeNumber(updateData.planDiscount, 0);
+        updateData.planDurationDays = sanitizeNumber(updateData.planDurationDays, null);
+        updateData.couponDiscountAmount = sanitizeNumber(updateData.couponDiscountAmount, 0);
+        updateData.finalPrice = sanitizeNumber(updateData.finalPrice, 0);
+
+        // Plan ID sanitization
+        if (updateData.planId === '' || updateData.planId === 'null' || updateData.planId === 'undefined') {
+            updateData.planId = null;
+        }
 
         // Handle File Uploads (Cloudinary)
         if (req.files) {
             Object.keys(req.files).forEach(key => {
-                const file = req.files[key][0];
-                updateData[key] = file.path; // Cloudinary URL
+                if (req.files[key] && req.files[key][0]) {
+                    const file = req.files[key][0];
+                    updateData[key] = file.path; // Cloudinary URL
+                }
             });
         }
 
-        // Handle Plan update
+        // Handle Plan logic only if planId is provided and changed or newly set
         if (updateData.planId) {
-            const plan = await Plan.findById(updateData.planId);
-            if (plan) {
-                let startDate;
-                if (updateData.planStartDate) {
-                    startDate = new Date(updateData.planStartDate);
-                } else {
-                    // Re-calculate from today if plan changed, else keep existing start date
-                    const existingPlanId = company.planId ? company.planId.toString() : null;
-                    const newPlanId = updateData.planId.toString();
-                    if (existingPlanId !== newPlanId) {
-                        startDate = new Date();
+            try {
+                const plan = await Plan.findById(updateData.planId);
+                if (plan) {
+                    let startDate;
+                    if (updateData.planStartDate && updateData.planStartDate !== 'null') {
+                        startDate = new Date(updateData.planStartDate);
                     } else {
-                        startDate = company.planStartDate ? new Date(company.planStartDate) : new Date();
-                    }
-                }
-
-                let expiryDate;
-                if (updateData.planExpiryDate) {
-                    expiryDate = new Date(updateData.planExpiryDate);
-                } else {
-                    expiryDate = new Date(startDate);
-                    expiryDate.setDate(expiryDate.getDate() + plan.planDurationDays);
-                }
-
-                updateData.planName = plan.planName;
-                updateData.planDurationDays = plan.planDurationDays;
-                updateData.planPrice = plan.planPrice || 0;
-                updateData.planDiscount = plan.planDiscount || 0;
-
-                // Calculate base price after plan discount
-                let calculatedPrice = (plan.planPrice || 0) * (1 - (plan.planDiscount || 0) / 100);
-                let couponDiscount = 0;
-
-                // Handle Coupon Application
-                if (updateData.couponCode && updateData.couponCode !== company.couponCode) {
-                    const now = new Date();
-                    const coupon = await Coupon.findOne({ couponCode: updateData.couponCode.toUpperCase(), isActive: true });
-
-                    if (!coupon) {
-                        return res.status(400).json({ message: 'Invalid coupon code' });
-                    }
-                    if (now < new Date(coupon.validFrom) || now > new Date(coupon.validTo)) {
-                        return res.status(400).json({ message: 'Coupon has expired' });
-                    }
-                    if (coupon.applicablePlans.length > 0 && !coupon.applicablePlans.some(p => p.toString() === plan._id.toString())) {
-                        return res.status(400).json({ message: 'Coupon not applicable to this plan' });
+                        const existingPlanId = company.planId ? company.planId.toString() : null;
+                        if (existingPlanId !== updateData.planId.toString()) {
+                            startDate = new Date();
+                        } else {
+                            startDate = company.planStartDate ? new Date(company.planStartDate) : new Date();
+                        }
                     }
 
-                    // Check if already used
-                    const usage = await CouponUsage.findOne({ couponId: coupon._id, companyId: company._id });
-                    if (usage) {
-                        return res.status(400).json({ message: 'You have already used this coupon' });
-                    }
-
-                    if (coupon.discountType === 'percentage') {
-                        couponDiscount = calculatedPrice * (coupon.discountValue / 100);
+                    let expiryDate;
+                    if (updateData.planExpiryDate && updateData.planExpiryDate !== 'null') {
+                        expiryDate = new Date(updateData.planExpiryDate);
                     } else {
-                        couponDiscount = coupon.discountValue;
+                        expiryDate = new Date(startDate);
+                        expiryDate.setDate(expiryDate.getDate() + (plan.planDurationDays || 0));
                     }
 
-                    updateData.couponDiscountAmount = couponDiscount;
-                    calculatedPrice -= couponDiscount;
-                } else if (updateData.couponCode === company.couponCode) {
-                    // Keep existing coupon discount if plan hasn't changed price significantly? 
-                    // Usually coupons are one-time. If it's the SAME coupon, we assume it's already recorded.
-                    // But if plan changed, we should re-calculate.
-                    couponDiscount = company.couponDiscountAmount || 0;
-                    calculatedPrice -= couponDiscount;
-                } else {
-                    updateData.couponDiscountAmount = 0;
+                    updateData.planName = plan.planName;
+                    updateData.planDurationDays = plan.planDurationDays;
+                    updateData.planStartDate = startDate;
+                    updateData.planExpiryDate = expiryDate;
                 }
-
-                updateData.finalPrice = Math.max(0, calculatedPrice);
-                updateData.planStartDate = startDate;
-                updateData.planExpiryDate = expiryDate;
+            } catch (pError) {
+                console.error('Plan lookup error during update:', pError);
+                // Continue with update even if plan lookup fails
             }
-        } else if (updateData.planId === '' || updateData.planId === null) {
+        } else if (updateData.planId === null) {
             // Plan cleared
-            updateData.planId = null;
             updateData.planName = '';
             updateData.planDurationDays = null;
             updateData.planPrice = 0;
@@ -343,29 +325,37 @@ const updateCompany = async (req, res) => {
         }
 
         const updatedCompany = await Company.findByIdAndUpdate(
-            req.params.id,
+            id,
             updateData,
             { new: true, runValidators: true }
         );
 
-        // If a NEW coupon was used, record it
-        if (updateData.couponCode && updateData.couponCode !== company.couponCode) {
-            const coupon = await Coupon.findOne({ couponCode: updateData.couponCode.toUpperCase() });
-            if (coupon) {
-                await CouponUsage.create({
-                    couponId: coupon._id,
-                    companyId: company._id,
-                    planId: updatedCompany.planId,
-                    discountAmount: updatedCompany.couponDiscountAmount,
-                    finalPrice: updatedCompany.finalPrice
-                });
+        // Handle Coupon Usage record independently
+        if (updateData.couponCode && updateData.couponCode !== 'null' && updateData.couponCode !== company.couponCode) {
+            try {
+                const coupon = await Coupon.findOne({ couponCode: updateData.couponCode.toUpperCase() });
+                if (coupon) {
+                    await CouponUsage.create({
+                        couponId: coupon._id,
+                        companyId: company._id,
+                        planId: updatedCompany.planId,
+                        discountAmount: updatedCompany.couponDiscountAmount || 0,
+                        finalPrice: updatedCompany.finalPrice || 0
+                    });
+                }
+            } catch (cError) {
+                console.error('Coupon usage creation error:', cError);
+                // Non-fatal error
             }
         }
 
         res.status(200).json(updatedCompany);
     } catch (error) {
-        console.error('Update Company Error:', error);
-        res.status(500).json({ message: error.message });
+        console.error('Update Company Detailed Error:', error);
+        res.status(500).json({
+            message: 'Internal Server Error during company update',
+            error: error.message
+        });
     }
 };
 
