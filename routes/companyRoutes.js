@@ -15,16 +15,7 @@ const uploadFields = upload.fields([
     { name: 'companyLogoImage', maxCount: 1 },
     { name: 'companyLetterHeadHeaderImage', maxCount: 1 },
     { name: 'companyLetterHeadFooterImage', maxCount: 1 },
-    { name: 'companyDigitalSignature', maxCount: 1 },
-    { name: 'companyPanCardFrontImage', maxCount: 1 },
-    { name: 'companyPanCardBackImage', maxCount: 1 },
-    { name: 'companyAadharCardFrontImage', maxCount: 1 },
-    { name: 'companyAadharCardBackImage', maxCount: 1 },
-    { name: 'companyOtherDocuments_1', maxCount: 1 },
-    { name: 'companyOtherDocuments_2', maxCount: 1 },
-    { name: 'companyOtherDocuments_3', maxCount: 1 },
-    { name: 'companyOtherDocuments_4', maxCount: 1 },
-    { name: 'companyOtherDocuments_5', maxCount: 1 }
+    { name: 'companyDigitalSignature', maxCount: 1 }
 ]);
 
 // All routes require authentication
