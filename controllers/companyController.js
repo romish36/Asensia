@@ -93,12 +93,12 @@ const createCompany = async (req, res) => {
 
         const companyData = { ...req.body };
 
-        // Handle File Uploads
+        // Handle File Uploads (Cloudinary: req.file.path is the full CDN URL)
         if (req.files) {
-            const companyFolderName = companyData.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                companyData[key] = `uploads/companies/${companyFolderName}/${file.filename}`;
+                // Cloudinary storage sets file.path to the full https:// URL
+                companyData[key] = file.path || file.secure_url || file.url;
             });
         }
 
@@ -238,13 +238,12 @@ const updateCompany = async (req, res) => {
 
         const updateData = { ...req.body };
 
-        // Handle File Uploads
+        // Handle File Uploads (Cloudinary: req.file.path is the full CDN URL)
         if (req.files) {
-            const companyName = updateData.companyName || company.companyName;
-            const companyFolderName = companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             Object.keys(req.files).forEach(key => {
                 const file = req.files[key][0];
-                updateData[key] = `uploads/companies/${companyFolderName}/${file.filename}`;
+                // Cloudinary storage sets file.path to the full https:// URL
+                updateData[key] = file.path || file.secure_url || file.url;
             });
         }
 

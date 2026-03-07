@@ -128,16 +128,11 @@ const uploadFile = async (req, res) => {
         else if (fileType === 'video') chatFileType = 'video';
         else if (req.file.mimetype.includes('pdf') || req.file.mimetype.includes('word') || req.file.mimetype.includes('excel')) chatFileType = 'document';
 
-        // Normalize path for URL and force it to be relative starting from 'uploads'
-        let normalizedPath = req.file.path.replace(/\\/g, '/');
-
-        // If the path is absolute or has the full local path, we need to extract the relative part
-        if (normalizedPath.includes('uploads/')) {
-            normalizedPath = 'uploads/' + normalizedPath.split('uploads/')[1];
-        }
+        // Cloudinary storage sets req.file.path to the full https:// CDN URL
+        const fileUrl = req.file.path || req.file.secure_url;
 
         res.status(200).json({
-            fileUrl: normalizedPath,
+            fileUrl: fileUrl,
             fileType: chatFileType,
             fileName: req.file.originalname,
             fileSize: req.file.size

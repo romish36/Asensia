@@ -1,24 +1,29 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('cloudinary').v2;
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        // We will pass companyName in the body or use a default
-        const companyName = req.body.companyName ? req.body.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'temp';
-        const dir = path.join(__dirname, '..', 'uploads', 'companies', companyName);
-
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        cb(null, dir);
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname).toLowerCase());
-    }
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const upload = multer({ storage: storage });
+// Use Cloudinary storage so files persist on live server (Render has ephemeral filesystem)
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+        const companyName = req.body.companyName
+            ? req.body.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+            : 'general';
+        return {
+            folder: `asencia_companies/${companyName}`,
+            resource_type: 'auto',
+            public_id: `${file.fieldname}_${Date.now()}`,
+        };
+    },
+});
+
+const upload = multer({ storage });
 
 module.exports = upload;
